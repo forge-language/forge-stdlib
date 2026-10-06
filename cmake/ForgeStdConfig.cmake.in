@@ -1,0 +1,6 @@
+@PACKAGE_INIT@
+include(CMakeFindDependencyMacro)
+find_dependency(ForgeRuntime CONFIG)
+@FORGE_STD_FIND_DEPENDENCIES@
+include("${CMAKE_CURRENT_LIST_DIR}/ForgeStdTargets.cmake")
+check_required_components(ForgeStd)

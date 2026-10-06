@@ -1,0 +1,23 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  native:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: stdlib
+      - name: Read pinned runtime revision
+        id: runtime
+        run: |
+          revision=$(sed -n 's/^set(FORGE_RUNTIME_REVISION "\(.*\)")/\1/p' stdlib/cmake/dependencies.cmake)
+          echo "revision=$revision" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        with:
+          repository: forge-language/forge-runtime
+          ref: ${{ steps.runtime.outputs.revision }}
+          path: runtime
+      - run: cmake -S stdlib -B build -DCMAKE_BUILD_TYPE=Release -DFORGE_RUNTIME_SOURCE_DIR="$GITHUB_WORKSPACE/runtime"
+      - run: cmake --build build -j2
+      - run: ctest --test-dir build --output-on-failure
+      - run: cmake --install build --prefix "$GITHUB_WORKSPACE/install"
