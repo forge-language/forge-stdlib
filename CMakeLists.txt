@@ -113,7 +113,7 @@ if(FORGE_ENABLE_TLS)
         target_link_libraries(forge_std PUBLIC OpenSSL::SSL OpenSSL::Crypto)
         list(APPEND FORGE_LINK_EXTRAS "${OPENSSL_SSL_LIBRARY}" "${OPENSSL_CRYPTO_LIBRARY}")
     else()
-        message(STATUS "Forge HTTP: OpenSSL not found — TLS falls back to plain HTTP")
+        message(STATUS "Forge HTTP: OpenSSL not found — TLS listen returns -1; TLS serve is unavailable")
     endif()
 endif()
 
