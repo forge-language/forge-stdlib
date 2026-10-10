@@ -1,3 +1,4 @@
+#define FORGE_STRING_NO_INLINE
 #include "forge/string.h"
 #include "forge/arena.h"
 #include <ctype.h>
@@ -13,7 +14,7 @@ static char *str_alloc(size_t n) {
     return (char *)fr_arena_alloc(fr_arena_tls(), n, 1);
 }
 
-typedef struct { const char *data; size_t len; } str_view_t;
+typedef fr_detail_str_view str_view_t;
 typedef struct { char *data; size_t len, cap; } str_builder_t;
 
 int64_t fr_str_view(const char *s) {
@@ -25,14 +26,11 @@ int64_t fr_str_view(const char *s) {
 }
 
 int64_t fr_str_view_len(int64_t handle) {
-    const str_view_t *view = (const str_view_t *)(intptr_t)handle;
-    return view ? (int64_t)view->len : 0;
+    return fr_detail_str_view_len(handle);
 }
 
 int64_t fr_str_view_at(int64_t handle, int64_t index) {
-    const str_view_t *view = (const str_view_t *)(intptr_t)handle;
-    if (!view || index < 0 || (uint64_t)index >= view->len) return -1;
-    return (unsigned char)view->data[index];
+    return fr_detail_str_view_at(handle, index);
 }
 
 static int view_range(const str_view_t *view, int64_t start, int64_t len,

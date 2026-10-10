@@ -7,6 +7,22 @@
 int main(void) {
     int64_t v = fr_str_view("한글😀");
     assert(v && fr_str_view_len(v) == 10);
+    /* Existing binaries/function pointers retain the external ABI. Compare
+     * them with newly compiled inline callers at every meaningful boundary. */
+    int64_t (*abi_at)(int64_t, int64_t) = &fr_str_view_at;
+    int64_t (*abi_len)(int64_t) = &fr_str_view_len;
+    int64_t indices[] = {INT64_MIN, -1, 0, 1, 9, 10, INT64_MAX};
+    for (size_t i = 0; i < sizeof(indices) / sizeof(indices[0]); ++i) {
+        assert(fr_str_view_at(v, indices[i]) == abi_at(v, indices[i]));
+        assert(fr_str_view_at(0, indices[i]) == abi_at(0, indices[i]));
+    }
+    assert(fr_str_view_len(v) == abi_len(v));
+    assert(fr_str_view_len(0) == abi_len(0));
+    int64_t once_index = 0;
+    assert(fr_str_view_at(v, once_index++) == 237 && once_index == 1);
+    int64_t once_handle[] = {v, 0};
+    int handle_index = 0;
+    assert(fr_str_view_len(once_handle[handle_index++]) == 10 && handle_index == 1);
     assert(fr_str_view_at(v, 0) == 237);
     assert(fr_str_view_at(v, 9) == 128);
     assert(fr_str_view_at(v, -1) == -1);

@@ -2,6 +2,7 @@
 #define FORGE_STRING_H
 
 #include <stdint.h>
+#include "forge/detail/string_views.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -26,6 +27,14 @@ void fr_str_arena_reset(void);
 int64_t fr_str_view(const char *s);
 int64_t fr_str_view_len(int64_t view);
 int64_t fr_str_view_at(int64_t view, int64_t index);
+/* Keep the exported functions for existing binaries and function pointers.
+ * Newly compiled callers expose the same checked reads to their optimizer.
+ * Function-like aliases evaluate each argument once. Define
+ * FORGE_STRING_NO_INLINE before including this header to use the ABI calls. */
+#ifndef FORGE_STRING_NO_INLINE
+#define fr_str_view_len(view) fr_detail_str_view_len((view))
+#define fr_str_view_at(view, index) fr_detail_str_view_at((view), (index))
+#endif
 /* Byte ranges clamp at the cached end. Negative start/length and zero handles
  * fail (NULL for sub, zero for append); starts beyond the end produce an empty
  * range. matches returns zero for an invalid start or NULL text, and accepts
