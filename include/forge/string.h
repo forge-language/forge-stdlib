@@ -52,6 +52,21 @@ int64_t fr_str_builder_append(int64_t builder, const char *s);
 int64_t fr_str_builder_append_view(int64_t builder, int64_t view,
                                    int64_t start, int64_t len);
 int64_t fr_str_builder_char(int64_t builder, int64_t ch);
+#ifndef FORGE_STRING_NO_INLINE
+static inline int64_t fr_detail_str_builder_char(int64_t handle, int64_t ch) {
+    fr_detail_str_builder *builder = (fr_detail_str_builder *)(intptr_t)handle;
+    if (!builder || ch <= 0 || ch > 255) return 0;
+    /* Subtraction keeps the spare-capacity test free of size_t overflow.
+     * Valid builders have data whenever capacity is nonzero. */
+    if (builder->cap > builder->len && builder->cap - builder->len > 1) {
+        builder->data[builder->len++] = (char)ch;
+        builder->data[builder->len] = '\0';
+        return handle;
+    }
+    return fr_str_builder_char(handle, ch);
+}
+#define fr_str_builder_char(builder, ch) fr_detail_str_builder_char((builder), (ch))
+#endif
 char *fr_str_builder_finish(int64_t builder);
 
 #ifdef __cplusplus

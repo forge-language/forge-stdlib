@@ -60,6 +60,39 @@ int main(void) {
     assert(strcmp(fr_str_view_sub(nul_view, 0, INT64_MAX), "a") == 0);
     assert(fr_str_view_matches(nul_view, 0, nul_string));
     assert(!fr_str_view_matches(nul_view, 1, "b"));
+    /* Compare the new capacity fast path with the exported ABI through
+     * multiple growth boundaries and every accepted unsigned byte. */
+    int64_t (*abi_char)(int64_t, int64_t) = &fr_str_builder_char;
+    int64_t fast_builder = fr_str_builder(), abi_builder = fr_str_builder();
+    char *first_snapshot = NULL;
+    for (int i = 0; i < 1024; ++i) {
+        int byte = i % 255 + 1;
+        assert(fr_str_builder_char(fast_builder, byte) == fast_builder);
+        assert(abi_char(abi_builder, byte) == abi_builder);
+        if (i == 62) first_snapshot = fr_str_builder_finish(fast_builder);
+        if (i == 62 || i == 63 || i == 64 || i == 126 || i == 127 || i == 128 || i == 1023) {
+            char *fast = fr_str_builder_finish(fast_builder);
+            char *external = fr_str_builder_finish(abi_builder);
+            assert(strlen(fast) == (size_t)i + 1);
+            assert(memcmp(fast, external, (size_t)i + 2) == 0);
+        }
+    }
+    assert(first_snapshot && strlen(first_snapshot) == 63);
+    for (int i = 0; i < 63; ++i) assert((unsigned char)first_snapshot[i] == i + 1);
+    int64_t invalid_bytes[] = {INT64_MIN, -1, 0, 256, INT64_MAX};
+    for (size_t i = 0; i < sizeof(invalid_bytes) / sizeof(invalid_bytes[0]); ++i) {
+        assert(fr_str_builder_char(fast_builder, invalid_bytes[i]) == 0);
+        assert(abi_char(abi_builder, invalid_bytes[i]) == 0);
+    }
+    assert(strcmp(fr_str_builder_finish(fast_builder), fr_str_builder_finish(abi_builder)) == 0);
+    assert(strlen(fr_str_builder_finish(fast_builder)) == 1024);
+    assert(fr_str_builder_char(0, 65) == abi_char(0, 65));
+    int64_t byte_once = 65;
+    int builder_once = 0;
+    int64_t builders[] = {fast_builder, abi_builder};
+    assert(fr_str_builder_char(builders[builder_once++], byte_once++) == fast_builder);
+    assert(builder_once == 1 && byte_once == 66);
+    assert(strlen(fr_str_builder_finish(fast_builder)) == 1025);
     int64_t b = fr_str_builder();
     assert(b && fr_str_builder_append(b, NULL) == b);
     assert(strcmp(fr_str_builder_finish(b), "") == 0);

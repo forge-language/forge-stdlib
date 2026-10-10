@@ -15,7 +15,7 @@ static char *str_alloc(size_t n) {
 }
 
 typedef fr_detail_str_view str_view_t;
-typedef struct { char *data; size_t len, cap; } str_builder_t;
+typedef fr_detail_str_builder str_builder_t;
 
 int64_t fr_str_view(const char *s) {
     str_view_t *view = fr_arena_alloc(fr_arena_tls(), sizeof(*view), 0);

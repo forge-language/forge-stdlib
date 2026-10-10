@@ -9,6 +9,9 @@
  * still must come from fr_str_view and is valid only until arena reset; this
  * definition does not make arbitrary or stale integer handles safe. */
 typedef struct { const char *data; size_t len; } fr_detail_str_view;
+/* Builder layout is also the existing ABI: only its capacity-backed byte
+ * append is inline; allocation and growth stay in the exported function. */
+typedef struct { char *data; size_t len, cap; } fr_detail_str_builder;
 
 static inline int64_t fr_detail_str_view_len(int64_t handle) {
     const fr_detail_str_view *view = (const fr_detail_str_view *)(intptr_t)handle;

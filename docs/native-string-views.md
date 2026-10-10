@@ -26,3 +26,12 @@ builder allocation, UTF-8, coroutine arena, or reset behavior. The same contract
 suite runs against both the inline header and the external ABI. Performance
 measurements live in the separate forge-benchmarks repository with preserved
 compiler, archive, and header hashes.
+
+The byte builder now also exposes a checked capacity fast path to newly compiled
+callers. It accepts only bytes 1..255 and valid nonzero handles, writes only when
+there is room for the byte and NUL terminator, and delegates capacity growth to
+the retained `fr_str_builder_char` ABI function. Subtraction avoids overflow in
+the capacity check. The shared builder pointer/length/capacity layout matches the
+previous implementation and has the same ABI review requirement as views.
+Snapshot immutability, invalid-byte rejection, argument evaluation and growth
+boundary behavior run against both inline and external callers.
