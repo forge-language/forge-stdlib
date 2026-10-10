@@ -1,8 +1,87 @@
 #include "forge/json.h"
 #include "forge/arena.h"
 #include <stdio.h>
+#include <errno.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+
+/* The public API returns NUL-terminated strings, so decoded U+0000 is
+ * rejected along with malformed escapes rather than returning truncated data.
+ * This validates the selected string, not the entire JSON document. */
+static int json_hex4(const char *p, const char *end, uint32_t *value) {
+    if ((size_t)(end - p) < 4) return 0;
+    uint32_t result = 0;
+    for (int i = 0; i < 4; i++) {
+        unsigned char c = (unsigned char)p[i];
+        unsigned digit;
+        if (c >= '0' && c <= '9') digit = c - '0';
+        else if (c >= 'a' && c <= 'f') digit = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') digit = c - 'A' + 10;
+        else return 0;
+        result = (result << 4) | digit;
+    }
+    *value = result;
+    return 1;
+}
+static char *json_decode_string(const char *start, const char *end) {
+    if (end - start < 2 || *start != '"' || end[-1] != '"') {
+        errno = EINVAL; return NULL;
+    }
+    char *out = fr_arena_alloc(fr_arena_tls(), (size_t)(end - start), 1);
+    if (!out) { errno = ENOMEM; return NULL; }
+    char *write = out;
+    const char *limit = end - 1;
+    for (const char *p = start + 1; p < limit;) {
+        unsigned char c = (unsigned char)*p++;
+        if (c == '"' || c < 0x20) { errno = EINVAL; return NULL; }
+        if (c != '\\') { *write++ = (char)c; continue; }
+        if (p >= limit) { errno = EINVAL; return NULL; }
+        c = (unsigned char)*p++;
+        switch (c) {
+        case '"': case '\\': case '/': *write++ = (char)c; break;
+        case 'b': *write++ = '\b'; break;
+        case 'f': *write++ = '\f'; break;
+        case 'n': *write++ = '\n'; break;
+        case 'r': *write++ = '\r'; break;
+        case 't': *write++ = '\t'; break;
+        case 'u': {
+            uint32_t value;
+            if (!json_hex4(p,limit,&value)) { errno = EINVAL; return NULL; }
+            p += 4;
+            if (value >= 0xd800 && value <= 0xdbff) {
+                uint32_t low;
+                if (limit - p < 6 || p[0] != '\\' || p[1] != 'u' ||
+                    !json_hex4(p+2,limit,&low) || low < 0xdc00 || low > 0xdfff) {
+                    errno = EINVAL; return NULL;
+                }
+                p += 6;
+                value = 0x10000 + ((value - 0xd800) << 10) + low - 0xdc00;
+            } else if (value >= 0xdc00 && value <= 0xdfff) {
+                errno = EINVAL; return NULL;
+            }
+            if (value == 0) { errno = EINVAL; return NULL; }
+            if (value < 0x80) *write++ = (char)value;
+            else if (value < 0x800) {
+                *write++ = (char)(0xc0 | (value >> 6));
+                *write++ = (char)(0x80 | (value & 0x3f));
+            } else if (value < 0x10000) {
+                *write++ = (char)(0xe0 | (value >> 12));
+                *write++ = (char)(0x80 | ((value >> 6) & 0x3f));
+                *write++ = (char)(0x80 | (value & 0x3f));
+            } else {
+                *write++ = (char)(0xf0 | (value >> 18));
+                *write++ = (char)(0x80 | ((value >> 12) & 0x3f));
+                *write++ = (char)(0x80 | ((value >> 6) & 0x3f));
+                *write++ = (char)(0x80 | (value & 0x3f));
+            }
+            break;
+        }
+        default: errno = EINVAL; return NULL;
+        }
+    }
+    *write = '\0'; errno = 0; return out;
+}
 
 static const char *find_key_value(const char *json, const char *key, char quote) {
     if (!json || !key) return NULL;
@@ -24,23 +103,17 @@ static const char *find_key_value(const char *json, const char *key, char quote)
 }
 
 const char *fr_json_get_string(const char *json, const char *key) {
+    errno = 0;
     const char *start = find_key_value(json, key, '"');
     if (!start) return "";
-    const char *end = strchr(start, '"');
-    if (!end) return "";
-    size_t len = (size_t)(end - start);
-
-    /* Allocate from the thread-local arena instead of a shared `static`
-     * buffer: a static buffer is a data race across threads and also gets
-     * clobbered if two extracted values are held at the same time (the
-     * second call overwrites the first). The arena gives every call its
-     * own independent memory, with no artificial length cap. */
-    fr_arena_t *arena = fr_arena_tls();
-    char *out = (char *)fr_arena_alloc(arena, len + 1, 1);
-    if (!out) return "";
-    memcpy(out, start, len);
-    out[len] = '\0';
-    return out;
+    const char *end = start;
+    while (*end && *end != '"') {
+        if (*end == '\\' && end[1]) end += 2;
+        else end++;
+    }
+    if (*end != '"') { errno = EINVAL; return ""; }
+    const char *decoded = json_decode_string(start-1,end+1);
+    return decoded ? decoded : "";
 }
 
 int64_t fr_json_get_int(const char *json, const char *key) {
@@ -203,7 +276,14 @@ static int json_find_child(const char *obj_start, const char *obj_end, const cha
         while (kp < obj_end && *kp != '"') {
             if (*kp == '\\' && kp + 1 < obj_end) kp += 2; else kp++;
         }
+        if (kp >= obj_end) { errno = EINVAL; return 0; }
         size_t klen = (size_t)(kp - kstart);
+        bool matches = klen == keylen && strncmp(kstart,key,keylen) == 0;
+        if (memchr(kstart,'\\',klen)) {
+            const char *decoded = json_decode_string(kstart-1,kp+1);
+            if (!decoded) return 0;
+            matches = strcmp(decoded,key) == 0;
+        }
         p = kp + 1;
         p = json_skip_ws(p, obj_end);
         if (p < obj_end && *p == ':') p++;
@@ -212,7 +292,7 @@ static int json_find_child(const char *obj_start, const char *obj_end, const cha
         const char *vstart = p;
         const char *vend = json_value_end(p, obj_end);
 
-        if (klen == keylen && strncmp(kstart, key, keylen) == 0) {
+        if (matches) {
             *val_start = vstart;
             *val_end = vend;
             return 1;
@@ -259,36 +339,12 @@ const char *fr_json_get_path_raw(const char *json, const char *path) {
 }
 
 const char *fr_json_get_path_string(const char *json, const char *path) {
-    const char *raw = fr_json_get_path_raw(json, path);
-    size_t n = strlen(raw);
-
-    if (n >= 2 && raw[0] == '"' && raw[n - 1] == '"') {
-        char *out = (char *)fr_arena_alloc(fr_arena_tls(), n, 1);
-        size_t oi = 0;
-        size_t i = 1;
-        while (i < n - 1) {
-            char c = raw[i];
-            if (c == '\\' && i + 1 < n - 1) {
-                char nc = raw[i + 1];
-                switch (nc) {
-                    case 'n': out[oi++] = '\n'; break;
-                    case 't': out[oi++] = '\t'; break;
-                    case 'r': out[oi++] = '\r'; break;
-                    case '"': out[oi++] = '"'; break;
-                    case '\\': out[oi++] = '\\'; break;
-                    case '/': out[oi++] = '/'; break;
-                    default: out[oi++] = nc; break;
-                }
-                i += 2;
-                continue;
-            }
-            out[oi++] = c;
-            i++;
-        }
-        out[oi] = '\0';
-        return out;
+    errno = 0;
+    const char *raw = fr_json_get_path_raw(json,path);
+    if (raw[0] == '"') {
+        const char *decoded = json_decode_string(raw,raw+strlen(raw));
+        return decoded ? decoded : "";
     }
-
     return raw;
 }
 

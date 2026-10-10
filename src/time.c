@@ -35,3 +35,13 @@ void fr_sleep_ms(int64_t ms) {
     nanosleep(&ts, NULL);
 #endif
 }
+
+int64_t fr_time_monotonic_ms(void) {
+#if defined(FORGE_OS_WINDOWS)
+    return (int64_t)GetTickCount64();
+#else
+    struct timespec ts;
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) return -1;
+    return (int64_t)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+#endif
+}

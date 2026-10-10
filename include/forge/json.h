@@ -3,6 +3,11 @@
 
 #include <stdint.h>
 
+/* String getters return arena-backed UTF-8. Malformed string escapes, lone
+ * surrogates and decoded U+0000 return "" with errno=EINVAL (allocation failure:
+ * ENOMEM). The NUL-terminated API cannot represent U+0000, although JSON permits
+ * it. Successful string decoding clears errno. Missing values remain "";
+ * these getters do not validate the complete JSON document. */
 const char *fr_json_get_string(const char *json, const char *key);
 int64_t fr_json_get_int(const char *json, const char *key);
 char *fr_json_stringify_str(const char *key, const char *value);
