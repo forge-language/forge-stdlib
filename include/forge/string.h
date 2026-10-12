@@ -114,6 +114,11 @@ static inline const char *fr_detail_str_builder_current(int64_t handle) {
     return builder->data;
 }
 char *fr_str_builder_finish(int64_t builder);
+/* Return an immutable snapshot by detaching the current buffer, then reset the
+ * builder to empty. The returned string and subsequent builder contents do not
+ * alias; both remain valid until arena reset. Returns NULL for an invalid
+ * handle or allocation failure. */
+char *fr_str_builder_finish_take(int64_t builder);
 
 #ifdef __cplusplus
 }

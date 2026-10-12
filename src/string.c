@@ -144,6 +144,24 @@ char *fr_str_builder_finish(int64_t handle) {
     return snapshot;
 }
 
+char *fr_str_builder_finish_take(int64_t handle) {
+    str_builder_t *builder = (str_builder_t *)(intptr_t)handle;
+    if (!builder) return NULL;
+    char *result = builder->data;
+    if (!result) {
+        result = str_alloc(1);
+        if (!result) return NULL;
+        result[0] = '\0';
+    } else {
+        if (builder->len >= builder->cap) return NULL;
+        result[builder->len] = '\0';
+    }
+    builder->data = NULL;
+    builder->len = 0;
+    builder->cap = 0;
+    return result;
+}
+
 int64_t fr_str_len(const char *s) {
     return s ? (int64_t)strlen(s) : 0;
 }
