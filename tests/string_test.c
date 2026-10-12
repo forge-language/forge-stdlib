@@ -4,7 +4,72 @@
 #include <stdio.h>
 #include <string.h>
 
+static void checked_append_paths(void) {
+    int64_t (*abi_append)(int64_t, const char *) = &fr_str_builder_append;
+    int64_t (*abi_range)(int64_t, int64_t, int64_t, int64_t) = &fr_str_builder_append_view;
+    int (*abi_matches)(int64_t, int64_t, const char *) = &fr_str_view_matches;
+    const char *texts[] = {NULL, "", "a", "abc", "bc", "abcd", "한글"};
+    int64_t starts[] = {INT64_MIN, -1, 0, 1, 2, 3, 4, INT64_MAX};
+    int64_t lengths[] = {INT64_MIN, -1, 0, 1, 2, 3, 4, INT64_MAX};
+    int64_t view = fr_str_view("abc");
+    int64_t fast = fr_str_builder(), external = fr_str_builder();
+    for (size_t i = 0; i < sizeof(starts) / sizeof(starts[0]); ++i) {
+        for (size_t j = 0; j < sizeof(texts) / sizeof(texts[0]); ++j) {
+            assert(fr_str_view_matches(view, starts[i], texts[j]) ==
+                   abi_matches(view, starts[i], texts[j]));
+            assert(fr_str_view_matches(0, starts[i], texts[j]) ==
+                   abi_matches(0, starts[i], texts[j]));
+        }
+        for (size_t j = 0; j < sizeof(lengths) / sizeof(lengths[0]); ++j) {
+            int64_t a = fr_str_builder_append_view(fast, view, starts[i], lengths[j]);
+            int64_t b = abi_range(external, view, starts[i], lengths[j]);
+            assert((a == 0) == (b == 0));
+            assert(strcmp(fr_str_builder_finish(fast), fr_str_builder_finish(external)) == 0);
+        }
+    }
+    /* Variable-sized fragments cross spare-capacity and growth boundaries;
+     * finished strings also serve as immutable sources for later appends. */
+    char *snapshot = fr_str_builder_finish(fast);
+    char saved[128];
+    assert(strlen(snapshot) < sizeof(saved));
+    strcpy(saved, snapshot);
+    for (int i = 0; i < 2048; ++i) {
+        const char *text = texts[(size_t)i % (sizeof(texts) / sizeof(texts[0]))];
+        assert(fr_str_builder_append(fast, text) == fast);
+        assert(abi_append(external, text) == external);
+        assert(fr_str_builder_append_view(fast, view, i % 4, i % 5) == fast);
+        assert(abi_range(external, view, i % 4, i % 5) == external);
+        if ((i & (i + 1)) == 0)
+            assert(strcmp(fr_str_builder_finish(fast), fr_str_builder_finish(external)) == 0);
+    }
+    assert(fr_str_builder_append(fast, snapshot) == fast);
+    assert(abi_append(external, snapshot) == external);
+    assert(strcmp(fr_str_builder_finish(fast), fr_str_builder_finish(external)) == 0);
+    assert(strcmp(snapshot, saved) == 0);
+    assert(fr_str_builder_append(0, "a") == abi_append(0, "a"));
+    assert(fr_str_builder_append_view(0, view, 0, 1) == abi_range(0, view, 0, 1));
+    assert(fr_str_builder_append_view(fast, 0, 0, 1) == abi_range(external, 0, 0, 1));
+
+    int builder_once = 0, text_once = 2;
+    int64_t builders[] = {fast, external};
+    assert(fr_str_builder_append(builders[builder_once++], texts[text_once++]) == fast);
+    assert(builder_once == 1 && text_once == 3);
+    builder_once = 0;
+    int64_t views[] = {view, 0};
+    int view_once = 0;
+    int64_t start_once = 0, len_once = 1;
+    assert(fr_str_builder_append_view(builders[builder_once++], views[view_once++],
+                                      start_once++, len_once++) == fast);
+    assert(builder_once == 1 && view_once == 1 && start_once == 1 && len_once == 2);
+    view_once = 0;
+    start_once = 0;
+    text_once = 2;
+    assert(fr_str_view_matches(views[view_once++], start_once++, texts[text_once++]));
+    assert(view_once == 1 && start_once == 1 && text_once == 3);
+}
+
 int main(void) {
+    checked_append_paths();
     int64_t v = fr_str_view("한글😀");
     assert(v && fr_str_view_len(v) == 10);
     /* Existing binaries/function pointers retain the external ABI. Compare

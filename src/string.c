@@ -33,19 +33,10 @@ int64_t fr_str_view_at(int64_t handle, int64_t index) {
     return fr_detail_str_view_at(handle, index);
 }
 
-static int view_range(const str_view_t *view, int64_t start, int64_t len,
-                      size_t *offset, size_t *count) {
-    if (!view || start < 0 || len < 0) return 0;
-    *offset = (uint64_t)start < view->len ? (size_t)start : view->len;
-    size_t remaining = view->len - *offset;
-    *count = (uint64_t)len < remaining ? (size_t)len : remaining;
-    return 1;
-}
-
 char *fr_str_view_sub(int64_t handle, int64_t start, int64_t len) {
     const str_view_t *view = (const str_view_t *)(intptr_t)handle;
     size_t offset, count;
-    if (!view_range(view, start, len, &offset, &count)) return NULL;
+    if (!fr_detail_str_view_range(view, start, len, &offset, &count)) return NULL;
     char *out = str_alloc(count + 1);
     if (!out) return NULL;
     if (count) memcpy(out, view->data + offset, count);
@@ -54,11 +45,7 @@ char *fr_str_view_sub(int64_t handle, int64_t start, int64_t len) {
 }
 
 int fr_str_view_matches(int64_t handle, int64_t start, const char *text) {
-    const str_view_t *view = (const str_view_t *)(intptr_t)handle;
-    if (!view || !text || start < 0 || (uint64_t)start > view->len) return 0;
-    size_t len = strlen(text);
-    if (len > view->len - (size_t)start) return 0;
-    return !len || memcmp(view->data + (size_t)start, text, len) == 0;
+    return fr_detail_str_view_matches(handle, start, text);
 }
 
 int64_t fr_str_builder(void) {
@@ -80,7 +67,6 @@ static int builder_reserve(str_builder_t *builder, size_t extra) {
     char *data = str_alloc(cap);
     if (!data) return 0;
     if (builder->len) memcpy(data, builder->data, builder->len);
-    data[builder->len] = '\0';
     builder->data = data;
     builder->cap = cap;
     return 1;
@@ -91,7 +77,6 @@ static int64_t builder_append_bytes(int64_t handle, const char *data, size_t len
     if (!builder_reserve(builder, len)) return 0;
     if (len) memmove(builder->data + builder->len, data, len);
     builder->len += len;
-    builder->data[builder->len] = '\0';
     return handle;
 }
 
@@ -103,7 +88,7 @@ int64_t fr_str_builder_append_view(int64_t handle, int64_t view_handle,
                                    int64_t start, int64_t len) {
     const str_view_t *view = (const str_view_t *)(intptr_t)view_handle;
     size_t offset, count;
-    if (!view_range(view, start, len, &offset, &count)) return 0;
+    if (!fr_detail_str_view_range(view, start, len, &offset, &count)) return 0;
     return builder_append_bytes(handle, count ? view->data + offset : NULL, count);
 }
 
@@ -149,7 +134,7 @@ char *fr_str_sub(const char *s, int64_t start, int64_t len) {
     if (!s || start < 0 || len < 0) return NULL;
     const str_view_t view = {s, strlen(s)};
     size_t offset, count;
-    if (!view_range(&view, start, len, &offset, &count)) return NULL;
+    if (!fr_detail_str_view_range(&view, start, len, &offset, &count)) return NULL;
     char *out = str_alloc(count + 1);
     if (!out) return NULL;
     if (count) memcpy(out, s + offset, count);

@@ -41,6 +41,10 @@ int64_t fr_str_view_at(int64_t view, int64_t index);
  * an empty text at the end. JavaScript sub requires a valid UTF-8 range. */
 char *fr_str_view_sub(int64_t view, int64_t start, int64_t len);
 int fr_str_view_matches(int64_t view, int64_t start, const char *text);
+#ifndef FORGE_STRING_NO_INLINE
+#define fr_str_view_matches(view, start, text) \
+    fr_detail_str_view_matches((view), (start), (text))
+#endif
 /* Arena-backed geometric growth; append returns the same handle or zero on
  * failure. char accepts bytes 1..255 (NUL is rejected). finish copies an
  * immutable snapshot, so further appends cannot modify previously returned
@@ -53,6 +57,26 @@ int64_t fr_str_builder_append_view(int64_t builder, int64_t view,
                                    int64_t start, int64_t len);
 int64_t fr_str_builder_char(int64_t builder, int64_t ch);
 #ifndef FORGE_STRING_NO_INLINE
+static inline int64_t fr_detail_str_builder_append(int64_t handle, const char *s) {
+    fr_detail_str_builder *builder = (fr_detail_str_builder *)(intptr_t)handle;
+    if (!builder) return 0;
+    size_t len = s ? strlen(s) : 0;
+    if (fr_detail_str_builder_try_append(builder, s, len)) return handle;
+    return fr_str_builder_append(handle, s);
+}
+static inline int64_t fr_detail_str_builder_append_view(int64_t handle,
+                                                        int64_t view_handle,
+                                                        int64_t start,
+                                                        int64_t len) {
+    fr_detail_str_builder *builder = (fr_detail_str_builder *)(intptr_t)handle;
+    const fr_detail_str_view *view = (const fr_detail_str_view *)(intptr_t)view_handle;
+    size_t offset, count;
+    if (!builder || !fr_detail_str_view_range(view, start, len, &offset, &count))
+        return 0;
+    const char *data = count ? view->data + offset : NULL;
+    if (fr_detail_str_builder_try_append(builder, data, count)) return handle;
+    return fr_str_builder_append_view(handle, view_handle, start, len);
+}
 static inline int64_t fr_detail_str_builder_char(int64_t handle, int64_t ch) {
     fr_detail_str_builder *builder = (fr_detail_str_builder *)(intptr_t)handle;
     if (!builder || ch <= 0 || ch > 255) return 0;
@@ -60,12 +84,14 @@ static inline int64_t fr_detail_str_builder_char(int64_t handle, int64_t ch) {
      * Valid builders have data whenever capacity is nonzero. */
     if (builder->cap > builder->len && builder->cap - builder->len > 1) {
         builder->data[builder->len++] = (char)ch;
-        builder->data[builder->len] = '\0';
         return handle;
     }
     return fr_str_builder_char(handle, ch);
 }
 #define fr_str_builder_char(builder, ch) fr_detail_str_builder_char((builder), (ch))
+#define fr_str_builder_append(builder, s) fr_detail_str_builder_append((builder), (s))
+#define fr_str_builder_append_view(builder, view, start, len) \
+    fr_detail_str_builder_append_view((builder), (view), (start), (len))
 #endif
 char *fr_str_builder_finish(int64_t builder);
 

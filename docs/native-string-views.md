@@ -1,7 +1,9 @@
 # Native string view accessors
 
 Newly compiled native callers inline the checked `fr_str_view_len` and
-`fr_str_view_at` reads through the installed `forge/string.h` header. This lets
+`fr_str_view_at` reads through the installed `forge/string.h` header. Checked
+`fr_str_view_matches` is also inline, allowing constant text lengths and short
+comparisons to be optimized at the call site. This lets
 the caller optimize repeated byte scans without an external function call for
 every byte. The exported functions remain available for existing binaries,
 function pointers, and callers defining `FORGE_STRING_NO_INLINE` before including
@@ -27,11 +29,21 @@ suite runs against both the inline header and the external ABI. Performance
 measurements live in the separate forge-benchmarks repository with preserved
 compiler, archive, and header hashes.
 
-The byte builder now also exposes a checked capacity fast path to newly compiled
-callers. It accepts only bytes 1..255 and valid nonzero handles, writes only when
-there is room for the byte and NUL terminator, and delegates capacity growth to
-the retained `fr_str_builder_char` ABI function. Subtraction avoids overflow in
-the capacity check. The shared builder pointer/length/capacity layout matches the
-previous implementation and has the same ABI review requirement as views.
+The builder exposes checked capacity fast paths for byte, string and view-range
+appends to newly compiled callers. The byte path accepts only bytes 1..255 and
+valid nonzero handles. The range path keeps the same negative-range rejection
+and end clamping as the retained ABI function. Each fast path writes only when
+capacity includes the new bytes and one reserved terminator byte; growth stays
+in the retained ABI functions. Subtraction avoids overflow in the capacity
+checks. The shared builder pointer/length/capacity layout matches the previous
+implementation and has the same ABI review requirement as views.
 Snapshot immutability, invalid-byte rejection, argument evaluation and growth
 boundary behavior run against both inline and external callers.
+
+A builder is an opaque length-delimited buffer. Its internal `data` pointer is
+not a public C string, and append operations do not write a trailing NUL after
+every fragment. `fr_str_builder_finish` copies exactly the recorded bytes into
+a fresh immutable snapshot and terminates that snapshot. The empty-builder
+case, all public byte and bounds behavior, arena lifetime, and the reserved
+capacity byte remain unchanged. The internal layout header does not authorize
+clients to reinterpret a handle and read or mutate its private buffer.
