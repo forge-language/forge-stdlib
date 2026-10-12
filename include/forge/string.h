@@ -93,9 +93,15 @@ static inline int64_t fr_detail_str_builder_char(int64_t handle, int64_t ch) {
     }
     return fr_str_builder_char(handle, ch);
 }
+#define fr_str_builder_char(builder, ch) fr_detail_str_builder_char((builder), (ch))
+#define fr_str_builder_append(builder, s) fr_detail_str_builder_append((builder), (s))
+#define fr_str_builder_append_view(builder, view, start, len) \
+    fr_detail_str_builder_append_view((builder), (view), (start), (len))
+#endif
 /* Internal escape hatch for compiler-generated dead-temporary append loops.
- * The caller must stop mutating the builder before using this borrowed pointer.
- * The spare terminator byte is part of every valid builder capacity. */
+ * Keep this available in ABI-only mode because generated code may still use
+ * the borrowed builder buffer during its allocation-failure fallback. The
+ * caller must stop mutating the builder before using this pointer. */
 static inline const char *fr_detail_str_builder_current(int64_t handle) {
     fr_detail_str_builder *builder = (fr_detail_str_builder *)(intptr_t)handle;
     if (!builder) return NULL;
@@ -104,11 +110,6 @@ static inline const char *fr_detail_str_builder_current(int64_t handle) {
     builder->data[builder->len] = '\0';
     return builder->data;
 }
-#define fr_str_builder_char(builder, ch) fr_detail_str_builder_char((builder), (ch))
-#define fr_str_builder_append(builder, s) fr_detail_str_builder_append((builder), (s))
-#define fr_str_builder_append_view(builder, view, start, len) \
-    fr_detail_str_builder_append_view((builder), (view), (start), (len))
-#endif
 char *fr_str_builder_finish(int64_t builder);
 
 #ifdef __cplusplus
