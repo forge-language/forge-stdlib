@@ -226,6 +226,16 @@ int main(void) {
     assert(fr_str_builder_finish(0) == NULL);
     assert(fr_str_builder_append(0, "x") == 0);
     assert(fr_str_builder_char(0, 65) == 0);
+    assert(fr_str_builder_with_capacity(-1) == 0);
+    int64_t reserved = fr_str_builder_with_capacity(3);
+    assert(reserved && fr_str_builder_char(reserved, 'a') == reserved);
+    assert(fr_str_builder_char(reserved, 'b') == reserved);
+    assert(fr_str_builder_char(reserved, 'c') == reserved);
+    assert(strcmp(fr_str_builder_finish(reserved), "abc") == 0);
+    assert(fr_str_builder_char(reserved, 'd') == reserved);
+    assert(strcmp(fr_str_builder_finish(reserved), "abcd") == 0);
+    int64_t empty_reserved = fr_str_builder_with_capacity(0);
+    assert(empty_reserved && strcmp(fr_str_builder_finish(empty_reserved), "") == 0);
     for (int i = 0; i < 100000; ++i) assert(fr_str_builder_char(b, 65) == b);
     char *large = fr_str_builder_finish(b);
     assert(strlen(large) == 100010 && large[100009] == 'A');

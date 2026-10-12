@@ -76,6 +76,19 @@ int64_t fr_str_builder(void) {
     return (int64_t)(intptr_t)builder;
 }
 
+int64_t fr_str_builder_with_capacity(int64_t capacity) {
+    if (capacity < 0 || (uint64_t)capacity > (uint64_t)SIZE_MAX - 1) return 0;
+    int64_t handle = fr_str_builder();
+    if (!handle || capacity == 0) return handle;
+    str_builder_t *builder = (str_builder_t *)(intptr_t)handle;
+    size_t allocation_size = (size_t)capacity + 1;
+    char *data = str_alloc(allocation_size);
+    if (!data) return 0;
+    builder->data = data;
+    builder->cap = allocation_size;
+    return handle;
+}
+
 static int builder_reserve(str_builder_t *builder, size_t extra) {
     if (!builder || builder->len == SIZE_MAX || extra > SIZE_MAX - builder->len - 1) return 0;
     size_t needed = builder->len + extra + 1;

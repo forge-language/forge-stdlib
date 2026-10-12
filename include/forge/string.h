@@ -57,6 +57,9 @@ int64_t fr_str_view_append_byte(int64_t view, int64_t ch);
  * finish requires complete, valid UTF-8 and throws for malformed byte sequences.
  * Builders, snapshots and views are all invalidated by arena reset. */
 int64_t fr_str_builder(void);
+/* Allocate a builder with room for at least capacity bytes. Returns zero for
+ * a negative capacity or allocation failure; the builder remains mutable. */
+int64_t fr_str_builder_with_capacity(int64_t capacity);
 int64_t fr_str_builder_append(int64_t builder, const char *s);
 int64_t fr_str_builder_append_view(int64_t builder, int64_t view,
                                    int64_t start, int64_t len);
