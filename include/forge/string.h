@@ -93,6 +93,17 @@ static inline int64_t fr_detail_str_builder_char(int64_t handle, int64_t ch) {
     }
     return fr_str_builder_char(handle, ch);
 }
+/* Internal escape hatch for compiler-generated dead-temporary append loops.
+ * The caller must stop mutating the builder before using this borrowed pointer.
+ * The spare terminator byte is part of every valid builder capacity. */
+static inline const char *fr_detail_str_builder_current(int64_t handle) {
+    fr_detail_str_builder *builder = (fr_detail_str_builder *)(intptr_t)handle;
+    if (!builder) return NULL;
+    if (!builder->data) return "";
+    if (builder->len >= builder->cap) return NULL;
+    builder->data[builder->len] = '\0';
+    return builder->data;
+}
 #define fr_str_builder_char(builder, ch) fr_detail_str_builder_char((builder), (ch))
 #define fr_str_builder_append(builder, s) fr_detail_str_builder_append((builder), (s))
 #define fr_str_builder_append_view(builder, view, start, len) \
