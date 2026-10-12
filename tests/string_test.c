@@ -68,8 +68,36 @@ static void checked_append_paths(void) {
     assert(view_once == 1 && start_once == 1 && text_once == 3);
 }
 
+static void cached_immutable_append_paths(void) {
+    int64_t (*append_view)(int64_t, int64_t) = &fr_str_view_append_byte;
+    const int64_t values[] = {65, 0, 66, 127, 128, 255, -1, 256, INT64_MIN, INT64_MAX};
+    char *legacy = "seed";
+    int64_t cached = fr_str_view(legacy);
+    int64_t old = cached;
+    for (size_t i = 0; i < sizeof(values) / sizeof(values[0]); ++i) {
+        legacy = fr_str_append(legacy, values[i]);
+        int64_t next = append_view(cached, values[i]);
+        assert(next);
+        cached = next;
+        assert(fr_str_view_len(cached) == (int64_t)strlen(legacy));
+        assert(strcmp(fr_str_view_sub(cached, 0, INT64_MAX), legacy) == 0);
+        /* Each prior view remains an immutable snapshot after later appends. */
+        if (i == 0) {
+            assert(fr_str_view_len(old) == 4);
+            assert(strcmp(fr_str_view_sub(old, 0, INT64_MAX), "seed") == 0);
+        }
+        old = cached;
+    }
+    assert(fr_str_view_append_byte(0, 65) == 0);
+    assert(fr_str_view_append_byte(fr_str_view(NULL), 0) != 0);
+    int64_t once = fr_str_view("x");
+    assert(fr_str_view_append_byte(once, 66) != 0);
+    assert(fr_str_view_len(once) == 1);
+}
+
 int main(void) {
     checked_append_paths();
+    cached_immutable_append_paths();
     int64_t v = fr_str_view("한글😀");
     assert(v && fr_str_view_len(v) == 10);
     /* Existing binaries/function pointers retain the external ABI. Compare

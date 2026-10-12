@@ -23,6 +23,15 @@ source and arena remain alive. Arena reset invalidates views, builders, and
 snapshots. Arbitrary or stale integer handles remain outside the contract; these
 checks do not establish general memory safety.
 
+`fr_str_view_append_byte(view, value)` is an additive immutable operation. It
+uses the source view's cached length, copies the visible prefix, and returns a
+new view whose metadata and NUL-terminated snapshot share one arena allocation.
+It does not change the source view or its bytes. Native values narrow to one
+byte as `fr_str_append` does; a narrowed NUL leaves the visible length unchanged.
+The result remains valid until arena reset, and allocation or size failure
+returns a zero handle. This avoids a `strlen` on each chained append but still
+copies and retains each prefix.
+
 Builder snapshots still copy immutable bytes, and this optimization changes no
 builder allocation, UTF-8, coroutine arena, or reset behavior. The same contract
 suite runs against both the inline header and the external ABI. Performance

@@ -48,6 +48,27 @@ int fr_str_view_matches(int64_t handle, int64_t start, const char *text) {
     return fr_detail_str_view_matches(handle, start, text);
 }
 
+int64_t fr_str_view_append_byte(int64_t handle, int64_t ch) {
+    const str_view_t *source = (const str_view_t *)(intptr_t)handle;
+    if (!source) return 0;
+    const unsigned char byte = (unsigned char)ch;
+    const size_t extra = byte ? 1 : 0;
+    if (source->len > (size_t)INT64_MAX || source->len > SIZE_MAX - extra - 1)
+        return 0;
+
+    const size_t len = source->len + extra;
+    if (len > SIZE_MAX - sizeof(str_view_t) - 1) return 0;
+    str_view_t *result = fr_arena_alloc(fr_arena_tls(), sizeof(*result) + len + 1, 0);
+    if (!result) return 0;
+    char *snapshot = (char *)(result + 1);
+    if (source->len) memcpy(snapshot, source->data, source->len);
+    if (extra) snapshot[source->len] = (char)byte;
+    snapshot[len] = '\0';
+    result->data = snapshot;
+    result->len = len;
+    return (int64_t)(intptr_t)result;
+}
+
 int64_t fr_str_builder(void) {
     str_builder_t *builder = fr_arena_alloc(fr_arena_tls(), sizeof(*builder), 0);
     if (!builder) return 0;

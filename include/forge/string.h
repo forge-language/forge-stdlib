@@ -41,6 +41,11 @@ int64_t fr_str_view_at(int64_t view, int64_t index);
  * an empty text at the end. JavaScript sub requires a valid UTF-8 range. */
 char *fr_str_view_sub(int64_t view, int64_t start, int64_t len);
 int fr_str_view_matches(int64_t view, int64_t start, const char *text);
+/* Copy one legacy append result using the source view's cached byte length.
+ * Native byte narrowing/NUL visibility match fr_str_append. JavaScript keeps
+ * its existing String.fromCharCode behavior and measures the UTF-8 view bytes.
+ * The returned view and immutable snapshot live until arena reset. */
+int64_t fr_str_view_append_byte(int64_t view, int64_t ch);
 #ifndef FORGE_STRING_NO_INLINE
 #define fr_str_view_matches(view, start, text) \
     fr_detail_str_view_matches((view), (start), (text))
