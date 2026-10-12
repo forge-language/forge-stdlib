@@ -27,6 +27,14 @@ static inline int64_t fr_detail_str_view_at(int64_t handle, int64_t index) {
     return (unsigned char)view->data[index];
 }
 
+/* Internal codegen-only fast path. The caller must prove that the handle is
+ * live and 0 <= index < view->len for the entire access. */
+static inline int64_t fr_detail_str_view_at_unchecked(int64_t handle,
+                                                       int64_t index) {
+    const fr_detail_str_view *view = (const fr_detail_str_view *)(intptr_t)handle;
+    return (unsigned char)view->data[index];
+}
+
 static inline int fr_detail_str_view_range(const fr_detail_str_view *view,
                                            int64_t start, int64_t len,
                                            size_t *offset, size_t *count) {
