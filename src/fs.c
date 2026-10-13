@@ -11,17 +11,19 @@
 #include <sys/stat.h>
 #include <windows.h>
 #define fr_mkdir(p) _mkdir(p)
+typedef struct _stat64 fr_fs_stat_t;
 #else
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #define fr_mkdir(p) mkdir(p, 0755)
+typedef struct stat fr_fs_stat_t;
 #endif
 
-static int fs_stat(const char *path, struct stat *st) {
+static int fs_stat(const char *path, fr_fs_stat_t *st) {
     if (!path || !st) return -1;
 #if defined(_WIN32)
-    return _stat(path, st);
+    return _stat64(path, st);
 #else
     return stat(path, st);
 #endif
@@ -64,7 +66,7 @@ int fr_fs_append(const char *path, const char *content) {
 }
 
 int fr_fs_exists(const char *path) {
-    struct stat st;
+    fr_fs_stat_t st;
     return fs_stat(path, &st) == 0;
 }
 
@@ -74,7 +76,7 @@ int fr_fs_remove(const char *path) {
 }
 
 int64_t fr_fs_size(const char *path) {
-    struct stat st;
+    fr_fs_stat_t st;
     if (fs_stat(path, &st) != 0) return -1;
 #if defined(_WIN32)
     if ((st.st_mode & _S_IFREG) == 0) return -1;
@@ -85,7 +87,7 @@ int64_t fr_fs_size(const char *path) {
 }
 
 int fr_fs_is_file(const char *path) {
-    struct stat st;
+    fr_fs_stat_t st;
     if (fs_stat(path, &st) != 0) return 0;
 #if defined(_WIN32)
     return (st.st_mode & _S_IFREG) != 0;
@@ -95,7 +97,7 @@ int fr_fs_is_file(const char *path) {
 }
 
 int fr_fs_is_dir(const char *path) {
-    struct stat st;
+    fr_fs_stat_t st;
     if (fs_stat(path, &st) != 0) return 0;
 #if defined(_WIN32)
     return (st.st_mode & _S_IFDIR) != 0;

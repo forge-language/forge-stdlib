@@ -11,10 +11,14 @@ int main(void) {
     CHECK(path && fr_fs_exists(path));
     CHECK(fr_fs_write(path, "first"));
     CHECK(fr_fs_append(path, " second"));
+    CHECK(fr_fs_size(path) == 12);
+    CHECK(fr_fs_is_file(path));
+    CHECK(!fr_fs_is_dir(path));
     char *data = fr_fs_read(path);
     CHECK(data && strcmp(data, "first second") == 0);
     free(data);
     CHECK(fr_fs_write(path, ""));
+    CHECK(fr_fs_size(path) == 0);
     data = fr_fs_read(path);
     CHECK(data && data[0] == '\0');
     free(data);

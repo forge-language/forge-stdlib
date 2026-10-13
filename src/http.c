@@ -13,9 +13,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if !defined(FORGE_OS_WINDOWS)
+#if defined(FORGE_OS_WINDOWS)
+#include <io.h>
+#else
 #include <errno.h>
 #include <sys/socket.h>
+#include <unistd.h>
 #endif
 
 #if defined(FORGE_OS_LINUX)
@@ -435,7 +438,11 @@ void fr_http_server_close(int64_t server) {
         g_servers[server].cached_resp = NULL;
         g_servers[server].cached_len = 0;
         if (g_servers[server].sendfile_fd >= 0) {
+#if defined(FORGE_OS_WINDOWS)
+            _close(g_servers[server].sendfile_fd);
+#else
             close(g_servers[server].sendfile_fd);
+#endif
             g_servers[server].sendfile_fd = -1;
             g_servers[server].sendfile_len = 0;
         }
