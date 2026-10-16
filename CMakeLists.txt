@@ -162,6 +162,23 @@ if(BUILD_TESTING)
         add_test(NAME ${name}_regressions COMMAND ${name}_test)
         set_tests_properties(${name}_regressions PROPERTIES TIMEOUT 30)
     endforeach()
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        add_executable(thread_affinity_test tests/thread_affinity_test.c)
+        target_link_libraries(thread_affinity_test PRIVATE ForgeStd::stdlib)
+        target_compile_options(thread_affinity_test PRIVATE -UNDEBUG)
+        target_link_options(thread_affinity_test PRIVATE "-Wl,--wrap=fr_thread_pin_cpu")
+        add_test(NAME thread_affinity_regressions COMMAND thread_affinity_test)
+        add_executable(http_startup_test tests/http_startup_test.c)
+        target_link_libraries(http_startup_test PRIVATE ForgeStd::stdlib)
+        target_compile_options(http_startup_test PRIVATE -UNDEBUG)
+        target_link_options(http_startup_test PRIVATE
+            "-Wl,--wrap=calloc" "-Wl,--wrap=fr_thread_start"
+            "-Wl,--wrap=fr_tcp_listen_reuseport" "-Wl,--wrap=setsockopt"
+            "-Wl,--wrap=fr_platform_sleep_forever" "-Wl,--wrap=getsockname"
+            "-Wl,--wrap=fr_sock_set_nonblocking")
+        add_test(NAME http_startup_regressions COMMAND http_startup_test)
+        set_tests_properties(http_startup_regressions PROPERTIES TIMEOUT 30)
+    endif()
     # Exercise the retained external ABI with the same behavioral contracts.
     add_executable(string_abi_test tests/string_test.c)
     target_compile_definitions(string_abi_test PRIVATE FORGE_STRING_NO_INLINE)

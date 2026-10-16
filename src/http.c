@@ -17,6 +17,7 @@
 #include <io.h>
 #else
 #include <errno.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
@@ -249,6 +250,20 @@ int64_t fr_http_listen(int64_t port) {
     if (sock >= FR_HTTP_MAX_SERVERS) {
         fr_tcp_close(sock);
         return -1;
+    }
+    if (port == 0) {
+        struct sockaddr_in addr;
+#if defined(FORGE_OS_WINDOWS)
+        int addr_len = sizeof(addr);
+#else
+        socklen_t addr_len = sizeof(addr);
+#endif
+        if (getsockname((fr_socket_t)sock, (struct sockaddr *)&addr, &addr_len) < 0) {
+            fr_tcp_close(sock);
+            return -1;
+        }
+        /* Additional workers must join this port, not request new ports. */
+        port = ntohs(addr.sin_port);
     }
     g_servers[sock].listen_sock = sock;
     g_servers[sock].port = port;
@@ -689,8 +704,7 @@ typedef struct {
 
 static void *http_worker_main(void *arg) {
     http_worker_ctx_t *ctx = (http_worker_ctx_t *)arg;
-    int cpus = fr_platform_cpu_count();
-    if (cpus > 0) fr_thread_pin_cpu(ctx->worker_id % cpus);
+    /* Preserve the starting thread's affinity; ordinals are not CPU IDs. */
     ctx->loop_fn(ctx->listen_fd, ctx->srv);
     return NULL;
 }
@@ -700,7 +714,7 @@ void fr_http_spawn_workers(int64_t server, fr_http_server_state_t *srv, int thre
     if (!srv || !loop_fn) return;
     fr_http_tune_server();
 
-    int cpus = fr_platform_cpu_count();
+    int cpus = fr_http_default_cpu_count();
     if (cpus < 1) cpus = 1;
     int accept_workers = (int)(threads > 0 ? threads : cpus);
 
@@ -709,8 +723,12 @@ void fr_http_spawn_workers(int64_t server, fr_http_server_state_t *srv, int thre
         return;
     }
 
-    fr_sock_close((int)server);
-
+    /* Keep the listening queue alive across worker startup. Some systems permit
+     * enabling reuseport on a bound listener; others require it before bind.
+     * In either case correctness does not depend on enabling it here: if an
+     * additional bind fails, workers can accept from the original socket.
+     * Do not enable it in http_listen: that would change exclusive-bind behavior
+     * before the caller elects to start a multi-worker server. */
     http_worker_ctx_t *ctxs = (http_worker_ctx_t *)calloc((size_t)accept_workers, sizeof(http_worker_ctx_t));
     if (!ctxs) {
         loop_fn((int)server, srv);
@@ -719,27 +737,44 @@ void fr_http_spawn_workers(int64_t server, fr_http_server_state_t *srv, int thre
 
     int started = 0;
     for (int i = 0; i < accept_workers; i++) {
-        int64_t fd = fr_tcp_listen_reuseport(srv->port);
-        if (fd < 0) continue;
+        int64_t fd = i == 0 ? server : fr_tcp_listen_reuseport(srv->port);
+        if (fd < 0) {
+#if defined(FORGE_OS_LINUX) || defined(FORGE_OS_MACOS)
+            fd = server;
+#else
+            /* The generic accept loop polls; do not multiply idle spinning
+             * when this platform cannot provide separate worker listeners. */
+            break;
+#endif
+        }
         ctxs[started].listen_fd = (int)fd;
         ctxs[started].srv = srv;
         ctxs[started].worker_id = started;
         ctxs[started].loop_fn = loop_fn;
         fr_thread_t *tid = NULL;
         if (fr_thread_start(&tid, http_worker_main, &ctxs[started]) != 0) {
-            fr_sock_close((int)fd);
+            if (fd != server) fr_sock_close((int)fd);
+            if (i == 0) {
+                free(ctxs);
+                loop_fn((int)server, srv);
+                return;
+            }
             continue;
         }
         fr_thread_detach(tid);
         started++;
+        if (i == 0) {
+            /* Allocation/first-thread fallback remains exclusive. Only enable
+             * sharing after a worker actually owns the original listener. */
+#if defined(SO_REUSEPORT) && (defined(FORGE_OS_LINUX) || defined(FORGE_OS_MACOS))
+            int reuseport = 1;
+            setsockopt((int)server, SOL_SOCKET, SO_REUSEPORT, &reuseport, sizeof(reuseport));
+#endif
+        }
     }
 
-    if (started == 0) {
-        free(ctxs);
-        loop_fn((int)server, srv);
-        return;
-    }
-
+    /* Worker zero owns the original listening queue. Keep its context and all
+     * other detached-worker contexts alive for the lifetime of the service. */
     fr_platform_sleep_forever();
 }
 
@@ -755,7 +790,7 @@ void fr_http_serve_hybrid(int64_t server, int64_t threads) {
     fr_http_server_state_t *srv = &g_servers[server];
     if (!srv->cached_resp || srv->cached_len == 0) return;
 
-    int cpus = fr_platform_cpu_count();
+    int cpus = fr_http_default_cpu_count();
     if (cpus < 1) cpus = 1;
     int pool_workers = (int)(threads > 0 ? threads : cpus);
 

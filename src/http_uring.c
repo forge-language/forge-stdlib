@@ -114,7 +114,7 @@ void fr_http_serve_uring(int64_t server, int64_t threads) {
     fr_http_server_state_t *srv = fr_http_state(server);
     if (!srv || !srv->cached_resp || srv->cached_len == 0) return;
 
-    int cpus = fr_platform_cpu_count();
+    int cpus = fr_http_default_cpu_count();
     if (cpus < 1) cpus = 1;
     int workers = threads > 0 ? (int)threads : cpus * 2;
     g_uring_sched = fr_scheduler_create(workers);

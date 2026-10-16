@@ -4,6 +4,7 @@
 #include "forge_runtime.h"
 #include <stdlib.h>
 #include <string.h>
+#include <limits.h>
 
 #if !defined(_WIN32)
 #include <pthread.h>
@@ -120,7 +121,7 @@ void fr_threading_yield(void) {
 }
 
 void fr_threading_pin(int64_t cpu) {
-    fr_thread_pin_cpu((int)cpu);
+    if (cpu >= 0 && cpu <= INT_MAX) fr_thread_pin_cpu((int)cpu);
 }
 
 int64_t fr_threading_self(void) {

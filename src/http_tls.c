@@ -277,7 +277,7 @@ void fr_http_serve_tls_mt(int64_t server, int64_t threads) {
 
     fr_http_tune_server();
 
-    int cpus = fr_platform_cpu_count();
+    int cpus = fr_http_default_cpu_count();
     if (cpus < 1) cpus = 1;
     int pool_workers = tls_pool_workers((int)threads, cpus);
 

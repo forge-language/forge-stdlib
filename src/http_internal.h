@@ -3,6 +3,17 @@
 
 #include <stddef.h>
 #include <stdint.h>
+#include "forge/platform.h"
+
+/* Keep standalone stdlib compatible with its older pinned runtime. Matched
+ * newer runtime headers/archives opt into affinity-aware automatic sizing. */
+static inline int fr_http_default_cpu_count(void) {
+#if defined(FORGE_PLATFORM_HAS_AVAILABLE_CPU_COUNT)
+    return fr_platform_available_cpu_count();
+#else
+    return fr_platform_cpu_count();
+#endif
+}
 
 typedef struct fr_http_server_state {
     int64_t listen_sock;

@@ -9,6 +9,9 @@ extern "C" {
 
 int64_t fr_threading_cpu_count(void);
 void fr_threading_yield(void);
+/* Best-effort explicit calling-thread pin to an absolute Linux CPU ID below
+ * CPU_SETSIZE. Invalid int64 IDs, OS rejection and unsupported targets are no-ops.
+ * This may replace an inherited taskset mask; it is not implicit worker policy. */
 void fr_threading_pin(int64_t cpu);
 int64_t fr_threading_self(void);
 int64_t fr_threading_worker_id(void);
